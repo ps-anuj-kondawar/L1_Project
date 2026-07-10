@@ -1,0 +1,9 @@
+chromadb>=1.0.0
+pydantic>=2.9.0
+streamlit>=1.36.0
+ollama>=0.2.1
+mcp>=1.0.0
+sentence-transformers>=2.7.0
+gradio>=6.20.0
+audioop-lts; python_version >= '3.13'
+huggingface_hub>=1.23.0
