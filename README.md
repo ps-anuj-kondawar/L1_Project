@@ -1,92 +1,65 @@
-# Automated Lab Safety Auditor
+# ⚗️ Automated Lab Safety Auditor
 
-An AI-powered compliance analysis tool that audits chemical formulation notes against OSHA regulatory limits using a full production-grade pipeline: **RAG → MCP → LLM → Pydantic Validation**.
-
----
+An intelligent, OSHA-compliant chemical formulation auditing system built on a hybrid **RAG + MCP + LLM + Pydantic** pipeline. Submit any lab formulation note in natural language and receive a structured compliance report in under 10 seconds — fully local, fully offline.
 
 ## Quick Start
 
 ```bash
-# Step 0: Install dependencies
+# 1. Install dependencies
+python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 
-# Step 1: Build the vector database (ONE TIME ONLY)
+# 2. Pull the local LLM
+ollama pull llama3.2:1b
+
+# 3. Ingest regulatory data into ChromaDB (one time)
 python ingest.py
 
-# Step 2: Launch the app (every time)
-streamlit run app.py
+# 4. Launch the Gradio UI
+python app.py
+# → Open http://127.0.0.1:7860
 ```
 
----
+## Documentation
 
-## Architecture
+| Document | Description |
+|----------|-------------|
+| [`docs/README.md`](docs/README.md) | Full architecture, configuration, pipeline flow, and setup guide |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | Complete implementation history — every decision, iteration, bug, and the reasoning behind the final design |
 
-```
-User Input (Streamlit)
-        │
-        ▼
-┌─────────────────────────────────────┐
-│  agent.py — run_audit_pipeline()    │
-│                                     │
-│  Phase 1: RAG (ChromaDB)            │
-│  Phase 2: MCP (hardware server)     │
-│  Phase 3: LLM (Ollama qwen2.5:3b)   │
-│  Phase 4: Pydantic Validation       │
-└─────────────────────────────────────┘
-        │
-        ▼
-Streamlit UI — Structured Report
-```
-
-## Pipeline Concepts
-
-| Component | Concept Demonstrated |
-|---|---|
-| `constants.py` | Tokens & Parameters (temperature=0.0, max_tokens=1024) |
-| `rag.py` + `ingest.py` | Vector DB Pipeline (Chunk → Embed → Store → Retrieve) |
-| `agent.py` system prompt | System Prompting + Guardrails |
-| `mcp_server.py` + MCP client in `agent.py` | Agentic Tool Use / MCP |
-| `models.py` `source_citation` field | Grounded, Cited Deliverables |
-| `RAG_TOP_K = 3` | Context Window Management |
-
-## Test Case
-
-Input:
-```
-Formula B: 94% Water, 6% Benzene. Heat the mixture to 120°C in a soda-lime glass beaker.
-```
-
-Expected output: `REJECTED`
-- Benzene at 6% vastly exceeds the 0.1% max / 1 ppm TWA OSHA limit
-- Soda-lime glass max safe temp is 100°C, target is 120°C → unsafe
-
-## File Structure
+## How It Works
 
 ```
-L1_Project/
-├── requirements.txt          ← pinned dependencies
-├── constants.py              ← Single Source of Truth for all config
-├── models.py                 ← Pydantic v2 output schemas
-├── ingest.py                 ← One-time RAG data ingestion
-├── rag.py                    ← ChromaDB query module
-├── mcp_server.py             ← MCP server (hardware thermal limits)
-├── agent.py                  ← LLM orchestration engine
-├── app.py                    ← Streamlit UI
-├── data/
-│   └── regulatory_framework.txt   ← OSHA-style regulatory text (5 chemicals)
-└── docs/
-    ├── SRS.md                ← System Requirements Specification
-    ├── implementation_plan.md ← Full engineering blueprint
-    └── idea.md               ← Original project proposal
+Free-form Lab Note
+      │
+      ▼ Regex extraction (chemicals + hardware)
+      │
+      ├──▶ ChromaDB (RAG): OSHA regulatory text per chemical
+      │
+      ├──▶ FastMCP Server: max safe temperature per equipment
+      │
+      ▼ Python compliance engine
+      │    ├── % vol vs % vol limit (e.g. Benzene > 0.1% → REJECTED)
+      │    ├── ppm vs ppm TWA limit
+      │    ├── Liquid % vs airborne ppm: NOT compared → COMPLIANT
+      │    └── Boiling point systemic hazard check → PARTIAL
+      │
+      ▼ LLM (60 tokens): one-sentence natural language summary
+      │
+      ▼ ComplianceReport (Pydantic)  →  Gradio UI
 ```
 
-## Dependencies
+## Verdicts
 
-| Library | Version | Role |
-|---|---|---|
-| chromadb | 0.5.3 | Vector database for RAG |
-| pydantic | 2.7.1 | Output schema validation |
-| streamlit | 1.35.0 | Web UI |
-| ollama | 0.2.1 | Local LLM inference |
-| mcp | 1.0.0 | Model Context Protocol SDK |
-| sentence-transformers | 2.7.0 | Embedding model (all-MiniLM-L6-v2) |
+| Status | Meaning |
+|--------|---------|
+| `✅ APPROVED` | All checks pass, no systemic hazards |
+| `⚠️ PARTIAL` | Checks pass but systemic hazard detected (e.g. boiling point exceeded) |
+| `❌ REJECTED` | Hard OSHA violation or hardware thermal limit exceeded |
+
+## System Requirements
+
+- Python 3.11+
+- [Ollama](https://ollama.ai) (local LLM runtime)
+- 8+ GB RAM (32 GB recommended for `llama3.2:3b` and above)
+- No GPU required — runs entirely on CPU
