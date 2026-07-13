@@ -158,5 +158,3 @@ Thumbs.db
 chroma_db/
 
 # Keep docs directory ignored if previously specified, but usually we only ignore docs/_build/
-# If the original had docs/, we keep it or target docs/
-docs/
