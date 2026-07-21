@@ -2,6 +2,7 @@ import re
 import json
 import asyncio
 import sys
+import time
 import ollama
 
 from mcp import ClientSession, StdioServerParameters
@@ -13,7 +14,7 @@ from constants import (
     HARDWARE_LIMITS,
     BOILING_POINTS_CELSIUS,
 )
-from models import ComplianceReport, ChemicalFlag, HardwareFlag
+from models import ComplianceReport, ChemicalFlag, HardwareFlag, PipelineMetrics
 from rag import query_regulations
 
 
@@ -114,7 +115,7 @@ def _parse_limits(rag_docs: list[str]) -> dict:
 
 # ── 3. COMPLIANCE LOGIC (deterministic) ────────────────────────────────────
 
-def _check_chemical(name: str, conc_str: str) -> ChemicalFlag:
+def _check_chemical(name: str, conc_str: str) -> tuple[ChemicalFlag, bool]:
     """Evaluate a single chemical against RAG-retrieved OSHA limits."""
     if name.lower() == "water":
         return ChemicalFlag(
@@ -123,24 +124,27 @@ def _check_chemical(name: str, conc_str: str) -> ChemicalFlag:
             detected_concentration=conc_str,
             regulatory_limit="No OSHA exposure limit",
             source_citation="Water is not a regulated hazardous substance under OSHA."
-        )
+        ), True
 
+    is_relevant = False
     try:
         rag_docs = query_regulations(name)
         # Use ONLY the top-1 most relevant document to avoid cross-chemical
         # contamination (e.g. Benzene's 0.1% limit bleeding into Isopropanol queries)
         top_doc = rag_docs[:1]
+        if top_doc:
+            is_relevant = name.lower() in top_doc[0].lower()
     except Exception:
         top_doc = []
 
-    if not top_doc:
+    if not top_doc or not is_relevant:
         return ChemicalFlag(
             chemical_name=name,
-            is_compliant=True,
+            is_compliant=False,
             detected_concentration=conc_str,
             regulatory_limit="Unknown: No regulatory data found",
             source_citation=""
-        )
+        ), False
 
     limits = _parse_limits(top_doc)
     citation = limits.get("citation", "")
@@ -176,7 +180,7 @@ def _check_chemical(name: str, conc_str: str) -> ChemicalFlag:
         detected_concentration=conc_str,
         regulatory_limit=regulatory_limit,
         source_citation=citation
-    )
+    ), is_relevant
 
 
 def _check_boiling_hazards(
@@ -198,7 +202,7 @@ def _check_boiling_hazards(
 
 # ── 4. MCP HARDWARE CHECK (async) ──────────────────────────────────────────
 
-async def _mcp_check(hw_name: str, temp: float) -> dict:
+async def _mcp_check(hw_name: str, temp: float) -> tuple[dict, bool]:
     server_params = StdioServerParameters(
         command=sys.executable, args=[MCP_SERVER_SCRIPT], env=None
     )
@@ -210,7 +214,8 @@ async def _mcp_check(hw_name: str, temp: float) -> dict:
                     "check_hardware_compatibility",
                     {"equipment_name": hw_name, "target_temperature_celsius": temp}
                 )
-                return json.loads(result.content[0].text) if result.content else {}
+                res_dict = json.loads(result.content[0].text) if result.content else {}
+                return res_dict, True
     except Exception:
         # Fallback: use local constants
         max_t = float(HARDWARE_LIMITS.get(hw_name, 0))
@@ -219,26 +224,55 @@ async def _mcp_check(hw_name: str, temp: float) -> dict:
             "target_temperature_celsius": temp,
             "max_safe_temperature_celsius": max_t,
             "is_safe": temp <= max_t,
-        }
+        }, False
+
+
+def _evaluate_llm_instruction_following(summary: str) -> float:
+    summary = summary.strip()
+    if not summary:
+        return 0.0
+    # Check rule 1: no newlines
+    if "\n" in summary:
+        return 0.0
+    # Check rule 2: no bullet points
+    if any(bullet in summary for bullet in ["* ", "- ", "• "]):
+        return 0.0
+    # Check rule 3: exactly one sentence
+    sentences = [s for s in re.split(r'(?<=[.!?])\s+', summary) if s.strip()]
+    if len(sentences) != 1:
+        return 0.0
+    return 1.0
 
 
 # ── 5. MAIN PIPELINE ───────────────────────────────────────────────────────
 
 async def _async_pipeline(user_input: str) -> ComplianceReport:
+    start_time = time.time()
+
     # Extract entities
     chemicals = _extract_chemicals(user_input)
     hardware  = _extract_hardware(user_input)
     target_temp = hardware[0][1] if hardware else None
 
     # Chemical compliance
-    chemical_flags: list[ChemicalFlag] = [
-        _check_chemical(name, conc) for name, conc in chemicals
-    ]
+    chemical_flags: list[ChemicalFlag] = []
+    relevancy_list: list[bool] = []
+    for name, conc in chemicals:
+        flag, is_rel = _check_chemical(name, conc)
+        chemical_flags.append(flag)
+        relevancy_list.append(is_rel)
+
+    # RAG Context Relevancy metric
+    if relevancy_list:
+        rag_context_relevancy = sum(1.0 for r in relevancy_list if r) / len(relevancy_list)
+    else:
+        rag_context_relevancy = 1.0
 
     # Hardware safety via MCP
     hardware_flags: list[HardwareFlag] = []
+    mcp_success_list: list[bool] = []
     for hw_name, temp in hardware:
-        res = await _mcp_check(hw_name, temp)
+        res, mcp_ok = await _mcp_check(hw_name, temp)
         max_t = res.get("max_safe_temperature_celsius", HARDWARE_LIMITS.get(hw_name, 0.0))
         is_safe = res.get("is_safe", temp <= max_t)
         hardware_flags.append(HardwareFlag(
@@ -247,6 +281,13 @@ async def _async_pipeline(user_input: str) -> ComplianceReport:
             max_safe_temperature_celsius=max_t,
             is_safe=is_safe,
         ))
+        mcp_success_list.append(mcp_ok)
+
+    # Agent Tool Call Success Rate metric
+    if mcp_success_list:
+        agent_tool_call_success_rate = sum(1.0 for s in mcp_success_list if s) / len(mcp_success_list)
+    else:
+        agent_tool_call_success_rate = 1.0
 
     # Boiling point systemic hazards
     boiling_hazards = _check_boiling_hazards(chemicals, target_temp)
@@ -296,11 +337,33 @@ async def _async_pipeline(user_input: str) -> ComplianceReport:
             "All chemicals and hardware meet regulatory requirements."
         )
 
+    # LLM Instruction Following metric
+    llm_instruction_following = _evaluate_llm_instruction_following(summary)
+
+    # Total latency
+    total_latency = time.time() - start_time
+
+    # Package metrics
+    metrics = PipelineMetrics(
+        rag_context_relevancy=rag_context_relevancy,
+        agent_tool_call_success_rate=agent_tool_call_success_rate,
+        llm_instruction_following=llm_instruction_following,
+        total_latency=total_latency,
+    )
+
+    # Save metrics to evaluation_results.json in project root
+    try:
+        with open("evaluation_results.json", "w") as f:
+            json.dump(metrics.model_dump(), f, indent=4)
+    except Exception as e:
+        sys.stderr.write(f"Error saving evaluation metrics: {e}\n")
+
     return ComplianceReport(
         chemical_flags=chemical_flags,
         hardware_flags=hardware_flags,
         overall_approval_status=overall_status,
         summary=summary,
+        metrics=metrics,
     )
 
 

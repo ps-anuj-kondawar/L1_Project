@@ -122,11 +122,11 @@ TEST_CASES = [
         "expected_status": "REJECTED" # Both fail
     },
 
-    # --- Category 8: Dynamic / Unknown chemicals (APPROVED if safe) ---
+    # --- Category 8: Dynamic / Unknown chemicals (REJECTED by default) ---
     {
-        "name": "Dynamic inputs: Unknown non-toxic chemical (COMPLIANT)",
+        "name": "Dynamic inputs: Unknown chemical (NON-COMPLIANT)",
         "input": "Mix 90% Ethanol and 10% Water. Store at 25C in a polypropylene container.",
-        "expected_status": "APPROVED" # Ethanol is unknown, no limits exist, so compliant. Polypropylene at 25C is safe.
+        "expected_status": "REJECTED" # Ethanol is unknown, no limits exist, so it is strictly rejected.
     }
 ]
 

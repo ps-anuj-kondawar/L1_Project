@@ -50,6 +50,20 @@ class HardwareFlag(BaseModel):
         )
     )
 
+class PipelineMetrics(BaseModel):
+    rag_context_relevancy: float = Field(
+        description="RAG Context Relevancy score: percentage of retrieved regulatory docs containing the chemical name (0.0 to 1.0)."
+    )
+    agent_tool_call_success_rate: float = Field(
+        description="Agent Tool Call Success Rate: percentage of hardware checks completed via live MCP without fallback (0.0 to 1.0)."
+    )
+    llm_instruction_following: float = Field(
+        description="LLM Instruction Following score: 1.0 if output matches all constraints (no bullets, single sentence), 0.0 otherwise."
+    )
+    total_latency: float = Field(
+        description="Total round-trip latency of the pipeline in seconds."
+    )
+
 class ComplianceReport(BaseModel):
     chemical_flags: list[ChemicalFlag] = Field(
         description="One ChemicalFlag entry for each chemical identified in the user input."
@@ -67,3 +81,7 @@ class ComplianceReport(BaseModel):
     summary: str = Field(
         description="A single sentence summarising the overall compliance finding, explicitly mentioning any boiling point or secondary hazards if present."
     )
+    metrics: PipelineMetrics = Field(
+        description="Evaluation and performance metrics for the pipeline run."
+    )
+

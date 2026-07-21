@@ -7,11 +7,11 @@ from constants import OLLAMA_MODEL
 
 example_inputs = {
     "Custom Input (Type below)": "",
-    "Test Case — REJECTED (Benzene + unsafe glass)":
+    "Test Case: REJECTED (Benzene + unsafe glass)":
         "Formula B: 94% Water, 6% Benzene. Heat the mixture to 120°C in a soda-lime glass beaker.",
-    "Test Case — APPROVED (safe solvents)":
+    "Test Case: APPROVED (safe solvents)":
         "Mix 70% Isopropanol and 30% Water. Store in a polypropylene container at 25°C.",
-    "Test Case — PARTIAL (mixed results)":
+    "Test Case: PARTIAL (mixed results)":
         "Formulation: 500 ppm Toluene, 800 ppm Acetone. Heated to 90°C in a polypropylene container.",
 }
 
@@ -60,6 +60,56 @@ css = """
     font-style: italic;
     margin-top: 0.8rem;
 }
+.metrics-card {
+    background: var(--background-fill-secondary);
+    border: 1px solid var(--border-color-primary);
+    border-radius: 8px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow-drop);
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border-color-secondary);
+}
+.metric-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+.metric-name {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--body-text-color);
+}
+.metric-badge {
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: monospace;
+}
+.badge-green {
+    background: rgba(34, 197, 94, 0.15);
+    color: rgb(34, 197, 94);
+}
+.badge-blue {
+    background: rgba(59, 130, 246, 0.15);
+    color: rgb(59, 130, 246);
+}
+.badge-orange {
+    background: rgba(249, 115, 22, 0.15);
+    color: rgb(249, 115, 22);
+}
+.badge-red {
+    background: rgba(239, 68, 68, 0.15);
+    color: rgb(239, 68, 68);
+}
 """
 
 def on_select_preset(selected):
@@ -70,6 +120,7 @@ def run_audit(user_input):
         return (
             "## ⚠️ ERROR\n**No input provided**",
             "Please enter a formulation note before running the audit.",
+            "<p style='color:var(--body-text-color-subdued);'>No audit results loaded.</p>",
             "<p style='color:var(--body-text-color-subdued);'>No audit results loaded.</p>",
             "<p style='color:var(--body-text-color-subdued);'>No audit results loaded.</p>",
             {}
@@ -150,13 +201,67 @@ def run_audit(user_input):
         else:
             hw_html = "<p style='color:var(--body-text-color-subdued);'>No lab equipment was identified in the formulation note.</p>"
 
-        return report_summary, summary_desc, chem_html, hw_html, report.model_dump()
+        # Read metrics from evaluation_results.json in project root
+        try:
+            with open("evaluation_results.json", "r") as f:
+                metrics_data = json.load(f)
+            rag_pct = metrics_data.get("rag_context_relevancy", 1.0) * 100
+            agent_pct = metrics_data.get("agent_tool_call_success_rate", 1.0) * 100
+            llm_pct = metrics_data.get("llm_instruction_following", 1.0) * 100
+            latency = metrics_data.get("total_latency", elapsed_time)
+        except Exception:
+            # Fallback to report.metrics
+            metrics = report.metrics
+            rag_pct = metrics.rag_context_relevancy * 100
+            agent_pct = metrics.agent_tool_call_success_rate * 100
+            llm_pct = metrics.llm_instruction_following * 100
+            latency = metrics.total_latency
+
+        rag_badge_class = "badge-green" if rag_pct >= 90 else ("badge-orange" if rag_pct >= 50 else "badge-red")
+        agent_badge_class = "badge-green" if agent_pct >= 90 else ("badge-orange" if agent_pct >= 50 else "badge-red")
+        
+        llm_badge_class = "badge-green" if llm_pct == 100 else "badge-red"
+        llm_status = "PASSED" if llm_pct == 100 else "FAILED"
+        
+        latency_badge_class = "badge-blue" if latency < 5.0 else ("badge-orange" if latency < 10.0 else "badge-red")
+
+        metrics_html = f"""
+        <div class="metrics-card">
+            <div class="metric-row">
+                <div class="metric-name">RAG Context Relevancy</div>
+                <div class="metric-value">
+                    <span class="metric-badge {rag_badge_class}">{rag_pct:.0f}%</span>
+                </div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-name">Agent Tool Call Success Rate</div>
+                <div class="metric-value">
+                    <span class="metric-badge {agent_badge_class}">{agent_pct:.0f}%</span>
+                </div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-name">LLM Instruction Following</div>
+                <div class="metric-value">
+                    <span class="metric-badge {llm_badge_class}">{llm_status}</span>
+                </div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-name">Round Trip Time</div>
+                <div class="metric-value">
+                    <span class="metric-badge {latency_badge_class}">{latency:.2f}s</span>
+                </div>
+            </div>
+        </div>
+        """
+
+        return report_summary, summary_desc, chem_html, hw_html, metrics_html, report.model_dump()
     except Exception as e:
         err_msg = f"❌ Pipeline Error: {type(e).__name__}: {str(e)}"
         tb = f"```\n{traceback.format_exc()}\n```"
         return (
             "## ⚠️ ERROR\n**Audit execution failed**",
             f"{err_msg}\n{tb}",
+            "<p style='color:var(--color-red-500);'>Error occurred during execution.</p>",
             "<p style='color:var(--color-red-500);'>Error occurred during execution.</p>",
             "<p style='color:var(--color-red-500);'>Error occurred during execution.</p>",
             {}
@@ -197,10 +302,10 @@ with gr.Blocks(title="Lab Safety Auditor") as demo:
         with gr.Column(scale=1, min_width=200):
             gr.Markdown("""
             ### ⚙️ Pipeline Overview
-            * **Step 1 — RAG Retrieval**: Query ChromaDB for regulatory data.
-            * **Step 2 — MCP Tool Call**: Verify thermal compatibility bounds.
-            * **Step 3 — LLM Analysis**: Generate safely formatted compliance reports.
-            * **Step 4 — Pydantic Validation**: Validate strict output boundaries.
+            * **Step 1: RAG Retrieval**: Query ChromaDB for regulatory data.
+            * **Step 2: MCP Tool Call**: Verify thermal compatibility bounds.
+            * **Step 3: LLM Analysis**: Generate safely formatted compliance reports.
+            * **Step 4: Pydantic Validation**: Validate strict output boundaries.
             
             ---
             
@@ -219,12 +324,15 @@ with gr.Blocks(title="Lab Safety Auditor") as demo:
             summary_desc = gr.Markdown("")
 
     with gr.Row():
-        with gr.Column():
+        with gr.Column(scale=2):
             gr.Markdown("#### 🧪 Chemical Compliance")
             chem_comp = gr.HTML(value="<p style='color:var(--body-text-color-subdued);'>No audit results loaded.</p>")
-        with gr.Column():
+        with gr.Column(scale=2):
             gr.Markdown("#### 🔩 Hardware Safety")
             hw_comp = gr.HTML(value="<p style='color:var(--body-text-color-subdued);'>No audit results loaded.</p>")
+        with gr.Column(scale=1, min_width=250):
+            gr.Markdown("#### 📊 Evaluation Metrics")
+            metrics_comp = gr.HTML(value="<p style='color:var(--body-text-color-subdued);'>No audit results loaded.</p>")
 
     with gr.Row():
         with gr.Column():
@@ -244,7 +352,7 @@ with gr.Blocks(title="Lab Safety Auditor") as demo:
     run_btn.click(
         fn=run_audit, 
         inputs=user_input, 
-        outputs=[status_badge, summary_desc, chem_comp, hw_comp, raw_json]
+        outputs=[status_badge, summary_desc, chem_comp, hw_comp, metrics_comp, raw_json]
     )
 
 if __name__ == "__main__":
