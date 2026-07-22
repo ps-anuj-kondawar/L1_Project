@@ -84,4 +84,20 @@ class ComplianceReport(BaseModel):
     metrics: PipelineMetrics = Field(
         description="Evaluation and performance metrics for the pipeline run."
     )
+    correction_notes: list[str] = Field(
+        default_factory=list,
+        description="Auto-correction messages when chemical names were fuzzy-matched."
+    )
+    boundary_warnings: list[str] = Field(
+        default_factory=list,
+        description="Warnings for physically impossible or contradictory input values."
+    )
+    cache_status: str = Field(
+        default="Cold Start",
+        description="Indicates whether the report was retrieved from cache or required a full pipeline run."
+    )
+    llm_provider_used: str = Field(
+        default="Google Gemini",
+        description="The actual LLM provider used to generate the report."
+    )
 

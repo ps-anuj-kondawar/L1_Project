@@ -1,6 +1,9 @@
-OLLAMA_MODEL = "llama3.2:1b"
-LLM_TEMPERATURE = 0.0
-MAX_OUTPUT_TOKENS = 1024
+import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
 
 CHROMA_PERSIST_DIR = "./chroma_db"
 CHROMA_COLLECTION_NAME = "regulatory_data"

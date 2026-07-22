@@ -1,6 +1,6 @@
 # System Architecture & Diagrams: Lab Safety Auditor
 
-This document provides a comprehensive view of the system architecture, data transformations, and operational workflows of the **Automated Lab Safety Auditor** (EcoFormulate Audit Tool). 
+This document provides a comprehensive view of the system architecture, data transformations, and operational workflows of the upgraded **Automated Lab Safety Auditor** (EcoFormulate Audit Tool). 
 
 All diagrams and descriptions are mapped directly to the actual code implementation in the repository.
 
@@ -10,8 +10,11 @@ All diagrams and descriptions are mapped directly to the actual code implementat
 
 The system consists of the following files and structural layers:
 
-* **Presentation Layer**: [app.py](file:///c:/L1_Project/app.py) (Gradio UI block layout, theme-aware CSS card injection, event bindings).
-* **Orchestration Layer**: [agent.py](file:///c:/L1_Project/agent.py) (Main pipeline, entity extractors, unit comparators, policy solver, Ollama LLM integration).
+* **Presentation Layer**: [app.py](file:///c:/L1_Project/app.py) (Gradio UI block layout, theme-aware CSS card injection, clickable link citations, event bindings).
+* **Orchestration Layer**: [agent.py](file:///c:/L1_Project/agent.py) (Main pipeline, entity extractors, unit comparators, policy solver, Tavily search client fallback).
+* **Validation Layer**: [validator.py](file:///c:/L1_Project/validator.py) (RapidFuzz string similarity corrections and physical boundary limit validators).
+* **Caching Layer**: [cache.py](file:///c:/L1_Project/cache.py) (Multi-Tier SQLite database caching, including prompt SHA-256 caching and summary caching).
+* **LLM Client Wrapper**: [llm_client.py](file:///c:/L1_Project/llm_client.py) (Unified async SDK wrapper for Google Gemini with dynamic OpenRouter free-tier fallback).
 * **Storage / Vector Database**: [rag.py](file:///c:/L1_Project/rag.py) (ChromaDB persistent client, vector semantic queries) and [ingest.py](file:///c:/L1_Project/ingest.py) (ChromaDB collection setup and ingestion of raw regulatory text).
 * **External Tooling Layer**: [mcp_server.py](file:///c:/L1_Project/mcp_server.py) (FastMCP server exposing hardware thermal boundaries via JSON).
 * **Data Definition & Models**: [models.py](file:///c:/L1_Project/models.py) (Pydantic v2 schemas for type-safe validation) and [constants.py](file:///c:/L1_Project/constants.py) (Boiling points, hardware threshold definitions, configuration bounds).
@@ -38,6 +41,8 @@ graph TD
     subgraph Regulatory Verification
         P2 -->|4. Query Chemical Name| D1[(D1: ChromaDB Vector Store)]
         D1 -->|5. OSHA Regulatory Chunk| P3[P3: Limit Parser]
+        P2 -->|5a. Search Web Fallback| D4[(D4: Tavily Search API)]
+        D4 -->|5b. Web Exposure limits| P3
         P3 -->|6. Permissible Exposure Limits| P6[P6: Policy Decision Solver]
     end
     
@@ -60,7 +65,7 @@ graph TD
     
     subgraph UI Render
         P8 -->|17. Validated ComplianceReport JSON| P9[P9: Gradio UI Renderer]
-        P9 -->|18. Markdown Badges & HTML Cards| User
+        P9 -->|18. Markdown Badges & Clickable HTML Cards| User
     end
     
     %% Styles
@@ -69,27 +74,9 @@ graph TD
     classDef entity fill:#fdf,stroke:#808,stroke-width:1.5px;
     
     class P1,P2,P3,P4,P5,P6,P7,P8,P9 process;
-    class D1,D2,D3 store;
+    class D1,D2,D3,D4 store;
     class User entity;
 ```
-
-### DFD Process & Store Index
-
-1. **Processes (P1 - P9)**:
-   * **P1: Entity Extractor** (Regex-based in [agent.py:L20-L87](file:///c:/L1_Project/agent.py#L20-L87)): Parses text via four patterns to output list of chemical-concentration tuples and checks hardware keys.
-   * **P2: RAG Retrieval Manager** (ChromaDB query in [rag.py:L8-L14](file:///c:/L1_Project/rag.py#L8-L14)): Calls ChromaDB query matching chemical names to get the `top-1` document.
-   * **P3: Limit Parser** (Regex-based in [agent.py:L90-L112](file:///c:/L1_Project/agent.py#L90-L112)): Searches RAG document chunk for `ppm TWA` and `% by volume` limits.
-   * **P4: MCP Hardware Validator** (Subprocess dispatch in [agent.py:L201-L223](file:///c:/L1_Project/agent.py#L201-L223)): Communicates with FastMCP via `stdio` transport. Fallback logic queries `constants.py` directly.
-   * **P5: Physical Hazard Checker** (Boiling point safety in [agent.py:L182-L197](file:///c:/L1_Project/agent.py#L182-L197)): Checks if the operating temperature exceeds the physical boiling point of any extracted solvent.
-   * **P6: Global Compliance Solver** (Logic solver in [agent.py:L254-L272](file:///c:/L1_Project/agent.py#L254-L272)): Evaluates compliance status of chemicals, safety bounds of equipment, physical limits, and sets status to `APPROVED`, `REJECTED`, or `PARTIAL`.
-   * **P7: LLM Summary Generator** (Ollama in [agent.py:L280-L297](file:///c:/L1_Project/agent.py#L280-L297)): Calls `llama3.2:1b` (temperature=0.0, num_predict=60) with violation notes to generate a concise, fluent summary.
-   * **P8: Report Schema Validator** (Pydantic in [agent.py:L299-L304](file:///c:/L1_Project/agent.py#L299-L304)): Packs details into the `ComplianceReport` model to enforce type schemas.
-   * **P9: Gradio UI Renderer** (Presentation formatter in [app.py:L82-L163](file:///c:/L1_Project/app.py#L82-L163)): Turns JSON parameters into styled HTML/CSS component widgets.
-
-2. **Data Stores (D1 - D3)**:
-   * **D1: ChromaDB Vector Store**: A directory database (`./chroma_db`) storing embedded OSHA hazard documents loaded via [ingest.py](file:///c:/L1_Project/ingest.py).
-   * **D2: Physical Chemistry DB**: A static table of chemical boiling points defined in [constants.py:L20-L28](file:///c:/L1_Project/constants.py#L20-L28).
-   * **D3: Hardware Limits DB**: A static mapping of equipment thermal limits in [constants.py:L13-L18](file:///c:/L1_Project/constants.py#L13-L18).
 
 ---
 
@@ -102,63 +89,84 @@ sequenceDiagram
     autonumber
     actor Chemist as User (Lab Chemist)
     participant UI as app.py (Gradio UI)
+    participant Cache as cache.py (SQLite Cache)
     participant Pipe as agent.py (Orchestrator)
+    participant Val as validator.py (Fuzzy Match & Check)
     participant RAG as rag.py (ChromaDB Wrapper)
+    participant Web as Tavily (Web Search)
     participant MCP as mcp_server.py (FastMCP)
-    participant LLM as Ollama (llama3.2:1b)
+    participant LLM as Google Gemini / OpenRouter
 
     Chemist->>UI: Selects/Enters Formulation & clicks "Run Audit"
-    UI->>Pipe: Calls run_audit_pipeline(user_input)
-    
-    %% Entity Extraction
-    Note over Pipe: Extracts chemical names, concentration strings,<br/>hardware vessels, and target operating temperature.
-    
-    %% Chemical Compliance Loop
-    rect rgb(230, 245, 255)
-        Note over Pipe: LOOP: For each extracted chemical
-        alt Chemical is Water
-            Note over Pipe: Directly marks as compliant (no RAG search)
-        else Chemical is Hazardous
-            Pipe->>RAG: query_regulations(chemical_name)
-            RAG-->>Pipe: Returns Top-1 document chunk
-            Note over Pipe: Runs regex parser on chunk:<br/>looks for 'ppm TWA' and '% by volume' limits.
-            Note over Pipe: Evaluates concentration unit matches.<br/>Instantiates ChemicalFlag schema.
+    UI->>Cache: Query exact prompt SHA-256 hash (Layer 2)
+    alt Cache Hit
+        Cache-->>UI: Return cached ComplianceReport JSON instantly (<0.01s)
+    else Cache Miss
+        UI->>Pipe: Calls run_audit_pipeline(user_input)
+        
+        %% Entity Extraction & Validation
+        Note over Pipe: Extracts raw chemical names, concentrations,<br/>hardware vessels, and target operating temperature.
+        Pipe->>Val: Correct chemical names (Fuzzy RapidFuzz) & validate boundaries
+        Val-->>Pipe: Returns corrected entities, warning tags, and error alerts.
+        
+        %% Chemical Compliance Loop
+        rect rgb(230, 245, 255)
+            Note over Pipe: LOOP: For each corrected chemical
+            alt Chemical is Water
+                Note over Pipe: Directly marks as compliant (no RAG search)
+            else Chemical is Hazardous
+                Pipe->>Cache: Check SQLite OSHA limits cache (Layer 1)
+                alt Layer 1 Hit
+                    Cache-->>Pipe: Return cached limits database entry
+                else Layer 1 Miss
+                    Pipe->>RAG: query_regulations(chemical_name)
+                    RAG-->>Pipe: Returns document chunk
+                    Note over Pipe: Checks relevancy. If matched, parses limits.
+                    alt RAG Miss / Irrelevant
+                        Pipe->>Web: Fetch OSHA standards (Tavily search API fallback)
+                        Web-->>Pipe: Returns search results
+                        Pipe->>LLM: Extract limits using LLM reasoning
+                        LLM-->>Pipe: Returns structured limits JSON
+                        Pipe->>Cache: Save limits to Layer 1 Cache database
+                    end
+                end
+            end
         end
-    end
-    
-    %% Hardware Compliance Loop
-    rect rgb(240, 240, 240)
-        Note over Pipe: LOOP: For each matched hardware vessel
-        Pipe->>MCP: Call check_hardware_compatibility(vessel, temp)
-        Note over MCP: Looks up threshold limits in constants.py
-        alt MCP Subprocess Success
-            MCP-->>Pipe: Returns compatibility JSON (is_safe, max_temp)
-        else MCP Subprocess Error
-            Note over Pipe: Falls back to local constants.py lookup
+        
+        %% Hardware Compliance Loop
+        rect rgb(240, 240, 240)
+            Note over Pipe: LOOP: For each matched hardware vessel
+            Pipe->>MCP: Call check_hardware_compatibility(vessel, temp)
+            Note over MCP: Looks up threshold limits in constants.py
+            alt MCP Subprocess Success
+                MCP-->>Pipe: Returns compatibility JSON (is_safe, max_temp)
+            else MCP Subprocess Error
+                Note over Pipe: Falls back to local constants.py lookup
+            end
         end
-        Note over Pipe: Instantiates HardwareFlag schema.
+        
+        %% Physical Hazard Check
+        Note over Pipe: Compares target temperature against BOILING_POINTS_CELSIUS.<br/>Generates boiling_hazards descriptions.
+        
+        %% Decision Matrix
+        Note over Pipe: Solves policy matrix:<br/>- Hardware limit violated or % volume exceeded? -> STATUS = REJECTED<br/>- ppm exposure limits violated? -> STATUS = PARTIAL<br/>- All checks pass? -> STATUS = APPROVED
+        
+        %% LLM Summary Generation
+        Pipe->>Cache: Check Layer 3 Summary Cache
+        alt Layer 3 Hit
+            Cache-->>Pipe: Returns cached summary text
+        else Layer 3 Miss
+            Pipe->>LLM: Generate summary (Google Gemini / OpenRouter Fallback)
+            LLM-->>Pipe: Returns concise safety summary
+            Pipe->>Cache: Save summary to Layer 3 Cache database
+        end
+        
+        %% UI output
+        Pipe->>Cache: Cache completed ComplianceReport (Layer 2)
+        Pipe-->>UI: Returns ComplianceReport model dictionary
+        Note over UI: Renders dynamic metrics card, orange warnings,<br/>and converts URLs to clickable links
+        UI-->>Chemist: Renders Gradio interface widgets
     end
-    
-    %% Physical Hazard Check
-    Note over Pipe: Compares target temperature against BOILING_POINTS_CELSIUS.<br/>Generates boiling_hazards descriptions.
-    
-    %% Decision Matrix
-    Note over Pipe: Solves policy matrix:<br/>- Any chemical non-compliant or hardware unsafe? -> STATUS = REJECTED<br/>- Boiling point exceeded only? -> STATUS = PARTIAL<br/>- All checks pass? -> STATUS = APPROVED
-    
-    %% LLM Summary Generation
-    alt Any Violation Notes Exist
-        Pipe->>LLM: chat(system_prompt, user_content: violation_notes)
-        LLM-->>Pipe: Returns ONE concise summary sentence (Temp=0.0, num_predict=60)
-    else No Violations Found
-        Pipe->>LLM: chat(system_prompt, user_content: "All checks passed")
-        LLM-->>Pipe: Returns standard positive safety summary
-    end
-    
-    %% Pydantic validation and UI output
-    Note over Pipe: Validates models.ComplianceReport schema.
-    Pipe-->>UI: Returns ComplianceReport model dictionary
-    Note over UI: Generates green-bordered (PASS) or red-bordered (FAIL)<br/>HTML card layouts using Gradio theme CSS.
-    UI-->>Chemist: Renders Markdown status, HTML cards, and raw JSON (⏱️ < 5 seconds)
 ```
 
 ---
