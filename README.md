@@ -1,4 +1,4 @@
-# ⚗️ Automated Lab Safety Auditor
+# Automated Lab Safety Auditor
 
 An intelligent, OSHA-compliant chemical formulation auditing system built on a hybrid **RAG + API-based LLMs + SQLite Caching + Data Validation** pipeline. Submit any lab formulation note in natural language and receive a structured compliance report in milliseconds, backed by dynamic web search fallbacks.
 
@@ -24,9 +24,9 @@ The Lab Safety Auditor evaluates chemical formulation notes against OSHA regulat
 
 | Status | Meaning |
 |--------|---------|
-| `✅ APPROVED` | All chemical concentrations and hardware temperatures are within safe limits. No systemic hazards detected. |
-| `⚠️ PARTIAL` | Exposure limits are exceeded but represent airborne/inhalation TWA limits (not liquid volume % violations), or a physical hazard exists (e.g., heating solvent above its boiling point). |
-| `❌ REJECTED` | A hard OSHA violation (e.g., Benzene > 0.1% by volume) or hardware thermal limit exceeded. |
+| `APPROVED` | All chemical concentrations and hardware temperatures are within safe limits. No systemic hazards detected. |
+| `PARTIAL` | Exposure limits are exceeded but represent airborne/inhalation TWA limits (not liquid volume % violations), or a physical hazard exists (e.g., heating solvent above its boiling point). |
+| `REJECTED` | A hard OSHA violation (e.g., Benzene > 0.1% by volume) or hardware thermal limit exceeded. |
 
 ---
 
