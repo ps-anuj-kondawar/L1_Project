@@ -1,6 +1,9 @@
-OLLAMA_MODEL = "llama3.2:1b"
-LLM_TEMPERATURE = 0.0
-MAX_OUTPUT_TOKENS = 1024
+import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
 
 CHROMA_PERSIST_DIR = "./chroma_db"
 CHROMA_COLLECTION_NAME = "regulatory_data"
@@ -8,7 +11,7 @@ CHROMA_COLLECTION_NAME = "regulatory_data"
 RAG_DATA_PATH = "./data/regulatory_framework.txt"
 RAG_TOP_K = 5
 
-MCP_SERVER_SCRIPT = "mcp_server.py"
+MCP_SERVER_SCRIPT = "src/infrastructure/mcp_server.py"
 
 HARDWARE_LIMITS: dict[str, int] = {
     "soda-lime glass":        100,

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 class ExtractedChemical(BaseModel):
     name: str = Field(description="Name of the chemical")
-    concentration: str = Field(description="Detected concentration, e.g., '12%' or '500 ppm'")
+    concentration: str | None = Field(default=None, description="Detected concentration, e.g., '12%' or '500 ppm'")
 
 class ExtractedHardware(BaseModel):
     name: str = Field(description="Name of the container or equipment")
@@ -19,7 +19,8 @@ class ChemicalFlag(BaseModel):
     is_compliant: bool = Field(
         description="True if the detected concentration is within regulatory limits, False otherwise."
     )
-    detected_concentration: str = Field(
+    detected_concentration: str | None = Field(
+        default=None,
         description="The concentration as stated in the user input (e.g., '6%' or '500 ppm')."
     )
     regulatory_limit: str = Field(
@@ -50,6 +51,20 @@ class HardwareFlag(BaseModel):
         )
     )
 
+class PipelineMetrics(BaseModel):
+    rag_context_relevancy: float = Field(
+        description="RAG Context Relevancy score: percentage of retrieved regulatory docs containing the chemical name (0.0 to 1.0)."
+    )
+    agent_tool_call_success_rate: float = Field(
+        description="Agent Tool Call Success Rate: percentage of hardware checks completed via live MCP without fallback (0.0 to 1.0)."
+    )
+    llm_instruction_following: float = Field(
+        description="LLM Instruction Following score: 1.0 if output matches all constraints (no bullets, single sentence), 0.0 otherwise."
+    )
+    total_latency: float = Field(
+        description="Total round-trip latency of the pipeline in seconds."
+    )
+
 class ComplianceReport(BaseModel):
     chemical_flags: list[ChemicalFlag] = Field(
         description="One ChemicalFlag entry for each chemical identified in the user input."
@@ -67,3 +82,23 @@ class ComplianceReport(BaseModel):
     summary: str = Field(
         description="A single sentence summarising the overall compliance finding, explicitly mentioning any boiling point or secondary hazards if present."
     )
+    metrics: PipelineMetrics = Field(
+        description="Evaluation and performance metrics for the pipeline run."
+    )
+    correction_notes: list[str] = Field(
+        default_factory=list,
+        description="Auto-correction messages when chemical names were fuzzy-matched."
+    )
+    boundary_warnings: list[str] = Field(
+        default_factory=list,
+        description="Warnings for physically impossible or contradictory input values."
+    )
+    cache_status: str = Field(
+        default="Cold Start",
+        description="Indicates whether the report was retrieved from cache or required a full pipeline run."
+    )
+    llm_provider_used: str = Field(
+        default="Google Gemini",
+        description="The actual LLM provider used to generate the report."
+    )
+
