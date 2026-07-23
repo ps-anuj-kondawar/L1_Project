@@ -4,7 +4,7 @@ import httpx
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
-from logger import logger
+from src.core.logger import logger
 
 load_dotenv(override=True)
 

@@ -1,5 +1,5 @@
 from chromadb import PersistentClient
-from constants import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, RAG_DATA_PATH
+from src.core.constants import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, RAG_DATA_PATH
 
 
 def main():

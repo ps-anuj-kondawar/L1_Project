@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 class ExtractedChemical(BaseModel):
     name: str = Field(description="Name of the chemical")
-    concentration: str = Field(description="Detected concentration, e.g., '12%' or '500 ppm'")
+    concentration: str | None = Field(default=None, description="Detected concentration, e.g., '12%' or '500 ppm'")
 
 class ExtractedHardware(BaseModel):
     name: str = Field(description="Name of the container or equipment")
@@ -19,7 +19,8 @@ class ChemicalFlag(BaseModel):
     is_compliant: bool = Field(
         description="True if the detected concentration is within regulatory limits, False otherwise."
     )
-    detected_concentration: str = Field(
+    detected_concentration: str | None = Field(
+        default=None,
         description="The concentration as stated in the user input (e.g., '6%' or '500 ppm')."
     )
     regulatory_limit: str = Field(

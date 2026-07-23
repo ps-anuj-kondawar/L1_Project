@@ -3,8 +3,8 @@ import json
 import traceback
 import html
 import re
-from agent import run_audit_pipeline_async, copilot_chat
-from logger import get_request_logs
+from src.core.agent import run_audit_pipeline_async, copilot_chat
+from src.core.logger import get_request_logs
 
 _URL_PATTERN = re.compile(r'(https?://\S+)')
 

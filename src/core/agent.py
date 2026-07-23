@@ -10,16 +10,16 @@ import contextvars
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from constants import (
+from src.core.constants import (
     MCP_SERVER_SCRIPT,
     HARDWARE_LIMITS,
     BOILING_POINTS_CELSIUS,
 )
-from models import ComplianceReport, ChemicalFlag, HardwareFlag, PipelineMetrics
-from rag import query_regulations
-import llm_client
-from llm_client import chat as llm_chat
-from cache import (
+from src.core.models import ComplianceReport, ChemicalFlag, HardwareFlag, PipelineMetrics
+from src.infrastructure.rag import query_regulations
+from src.infrastructure import llm_client
+from src.infrastructure.llm_client import chat as llm_chat
+from src.infrastructure.cache import (
     get_semantic_cache,
     set_semantic_cache,
     get_summary_cache,
@@ -29,13 +29,13 @@ from cache import (
     get_conversation_cache,
     set_conversation_cache,
 )
-from validator import (
+from src.utils.validator import (
     validate_and_correct_chemicals,
     validate_physical_boundaries,
     fuzzy_match_hardware,
     KNOWN_CHEMICALS,
 )
-from logger import logger, start_request_logging
+from src.core.logger import logger, start_request_logging
 
 _last_pipeline_path: contextvars.ContextVar[str] = contextvars.ContextVar(
     "last_pipeline_path", default="RAG Database Lookup"
@@ -222,12 +222,12 @@ async def _check_chemical(name: str, conc_str: str) -> tuple[ChemicalFlag, bool]
         set_osha_limits(name, limits)
     citation = limits.get("citation", "")
 
-    is_pct = "%" in conc_str
-    is_ppm = "ppm" in conc_str.lower()
+    is_pct = conc_str and "%" in conc_str
+    is_ppm = conc_str and "ppm" in conc_str.lower()
 
     try:
         conc_val = float(re.search(r'[\d.]+', conc_str).group())
-    except (AttributeError, ValueError):
+    except (AttributeError, ValueError, TypeError):
         conc_val = None
 
     is_compliant = True
@@ -264,7 +264,7 @@ def _check_boiling_hazards(
         return []
     hazards = []
     for name, conc in chemicals:
-        if "ppm" in conc.lower():
+        if conc and "ppm" in conc.lower():
             continue
         bp = BOILING_POINTS_CELSIUS.get(name.lower())
         if bp is not None and target_temp >= bp:

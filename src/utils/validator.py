@@ -1,6 +1,6 @@
 import re
 from rapidfuzz import process, fuzz
-from constants import BOILING_POINTS_CELSIUS, HARDWARE_LIMITS
+from src.core.constants import BOILING_POINTS_CELSIUS, HARDWARE_LIMITS
 
 # Master list of verified chemical names — pulled from ChromaDB metadata + known constants
 KNOWN_CHEMICALS = [
@@ -52,7 +52,7 @@ def validate_physical_boundaries(
 
     for name, conc in chemicals:
         # Detect contradictory unit (e.g. "5% ppm")
-        if "%" in conc and "ppm" in conc.lower():
+        if conc and "%" in conc and "ppm" in conc.lower():
             warnings.append(
                 f"'{name}': concentration '{conc}' contains contradictory units (% and ppm). "
                 f"Please clarify which unit applies."

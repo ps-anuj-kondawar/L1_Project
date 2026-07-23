@@ -11,7 +11,7 @@ CHROMA_COLLECTION_NAME = "regulatory_data"
 RAG_DATA_PATH = "./data/regulatory_framework.txt"
 RAG_TOP_K = 5
 
-MCP_SERVER_SCRIPT = "mcp_server.py"
+MCP_SERVER_SCRIPT = "src/infrastructure/mcp_server.py"
 
 HARDWARE_LIMITS: dict[str, int] = {
     "soda-lime glass":        100,

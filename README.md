@@ -112,19 +112,16 @@ The Lab Safety Auditor evaluates chemical formulation notes against OSHA regulat
 ├── .env                         # API keys & environment configs (ignored)
 ├── .env.example                 # Example template for environment variables
 ├── .gitignore                   # Standard Python/Venv/OS ignore rules
-├── agent.py                     # Execution orchestrator & validation rules
-├── app.py                       # Gradio Web Interface
-├── cache.py                     # Layer 1, 2, and 3 SQLite Caching Engine
-├── constants.py                 # Hardcoded physical constants & threshold limits
-├── evaluation_results.json      # Performance statistics from test runs
-├── ingest.py                    # Script to load OSHA text into ChromaDB
-├── llm_client.py                # Gemini & OpenRouter async calling client
-├── mcp_server.py                # FastMCP server for equipment limits lookup
-├── models.py                    # Pydantic schemas for data models
-├── rag.py                       # ChromaDB query utilities
+├── docs/                        # Project documentation, pitch decks, and architecture diagrams
+├── src/                         # Source code directory
+│   ├── core/                    # Core orchestration (agent.py, models.py, constants.py)
+│   ├── infrastructure/          # External dependencies (llm_client.py, rag.py, cache.py, mcp_server.py)
+│   ├── ui/                      # Web interface (app.py)
+│   └── utils/                   # Utilities (validator.py)
+├── scripts/                     # Standalone scripts (ingest.py, etc.)
+├── tests/                       # Test suite (test_formulations.py)
 ├── requirements.txt             # Project library dependencies
-├── test_formulations.py         # 22-case integration test suite
-└── validator.py                 # RapidFuzz and physical boundary checks
+└── run.py                       # Main entry point to launch the app or tests
 ```
 
 ---
@@ -178,13 +175,14 @@ python ingest.py
 
 ### 5. Launch web app
 ```bash
-python app.py
+python run.py
 ```
 Open `http://127.0.0.1:7860` in your web browser.
 
 ### 6. Run test suite
+The test suite can also be executed via the run script (or directly via tests/test_formulations.py):
 ```bash
-python test_formulations.py
+python tests/test_formulations.py
 ```
 *Note: Running this will automatically generate and update `evaluation_results.json`.*
 

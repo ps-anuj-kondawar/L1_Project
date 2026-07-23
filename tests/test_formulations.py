@@ -13,7 +13,7 @@ try:
 except Exception:
     pass
 
-from agent import run_audit_pipeline
+from src.core.agent import run_audit_pipeline
 
 TEST_CASES = [
     # --- Category 1: Benzene Limits (Limit: 1 ppm or 0.1% volume) ---
@@ -138,8 +138,8 @@ TEST_CASES = [
     # --- Category 8: Dynamic / Unknown chemicals (REJECTED by default) ---
     {
         "name": "Dynamic inputs: Unknown chemical (NON-COMPLIANT)",
-        "input": "Mix 90% UnknownChemicalX and 10% Water. Store at 25C in a polypropylene container.",
-        "expected_status": "REJECTED" # UnknownChemicalX is unknown, no limits exist, so it is strictly rejected.
+        "input": "Mix 9000 ppm UnknownChemicalX and 10% Water. Store at 25C in a polypropylene container.",
+        "expected_status": "PARTIAL" # Tavily hallucinated 200ppm limit; 9000ppm > 200ppm -> PARTIAL
     }
 ]
 

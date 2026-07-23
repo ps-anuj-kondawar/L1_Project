@@ -1,6 +1,6 @@
 from chromadb import PersistentClient
-from constants import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, RAG_TOP_K
-from cache import get_osha_limits
+from src.core.constants import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, RAG_TOP_K
+from src.infrastructure.cache import get_osha_limits
 
 _client = PersistentClient(path=CHROMA_PERSIST_DIR)
 _collection = _client.get_collection(name=CHROMA_COLLECTION_NAME)
